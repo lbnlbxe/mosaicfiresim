@@ -56,9 +56,14 @@ class AxiLiteBridgeModule(key: AxiLiteKey)(implicit p: Parameters)
     Pulsify(startWrite, pulseLength = 1)
     val startRead = genWORegInit(Wire(Bool()), "start_read", false.B)
     Pulsify(startRead, pulseLength = 1)
-    val outRData   = Wire(UInt(key.dataWidth.W))
+    // NB: These are holding registers, not per-cycle wires: genROReg samples
+    // its argument every cycle, so a wire driven by the FSM's combinational
+    // defaults would be zeroed one cycle after the fire — while done stays
+    // high — and the host would read back 0. Held here until the next
+    // transaction completes.
+    val outRData   = RegInit(0.U(key.dataWidth.W))
     genROReg(outRData, "out_rdata")
-    val outResp = Wire(UInt(2.W))
+    val outResp = RegInit(0.U(2.W))
     genROReg(outResp, "out_resp")
     val doneReg  = RegInit(false.B)
     val doneWire = Wire(Bool())
@@ -92,9 +97,6 @@ class AxiLiteBridgeModule(key: AxiLiteKey)(implicit p: Parameters)
 
     val sIdle :: sWrite :: sWriteResp :: sRead :: sReadResp :: Nil = Enum(5)
     val state = RegInit(sIdle)
-
-    outRData := 0.U
-    outResp  := 0.U
 
     switch(state) {
       is(sIdle) {

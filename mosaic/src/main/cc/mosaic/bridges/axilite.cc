@@ -37,6 +37,8 @@ bool axilite_t::issue_read(uint32_t addr) {
 
 bool axilite_t::done() { return read(mmio_addrs.done) != 0; }
 
+void axilite_t::complete() { in_flight_ = false; }
+
 uint32_t axilite_t::rdata() { return read(mmio_addrs.out_rdata); }
 
 uint32_t axilite_t::resp() { return read(mmio_addrs.out_resp); }

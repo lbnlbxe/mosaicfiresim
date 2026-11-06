@@ -178,7 +178,21 @@ void mosaic_top_t::step(size_t cycles)
 
 void mosaic_top_t::axilite_wait_done(size_t max_cycles)
 {
+    // Phase 1: wait for the start command to be accepted, which clears the
+    // widget's done flag. Control-register writes take target cycles to reach
+    // the widget, so done() may still read 1 from the PREVIOUS transaction
+    // here; a single-phase poll returns immediately and lets the caller
+    // sample stale results (the bug behind the all-zero readbacks).
     size_t waited = 0;
+    while (axilite.done()) {
+        step(1);
+        if (++waited > max_cycles) {
+            fprintf(stderr, "[AXILITE] Timeout waiting for transaction acceptance\n");
+            abort();
+        }
+    }
+    // Phase 2: wait for the transaction to complete (done reasserts).
+    waited = 0;
     while (!axilite.done()) {
         step(1);
         if (++waited > max_cycles) {
@@ -186,6 +200,7 @@ void mosaic_top_t::axilite_wait_done(size_t max_cycles)
             abort();
         }
     }
+    axilite.complete();
 }
 
 void mosaic_top_t::axilite_write(uint32_t addr, uint32_t data)
@@ -222,6 +237,36 @@ void mosaic_top_t::tile_write_reg(uint32_t tile, uint32_t offset, uint32_t data)
 
 uint32_t mosaic_top_t::tile_read_reg(uint32_t tile, uint32_t offset)
 {
+    // Upstream MoSAIC quirk (S_CONTROLLER_USS.sv): tile_S_AXI_ARADDR is
+    // driven from control_S_AXI_AWADDR (copy-paste bug), so a read is served
+    // from the register at the LAST-WRITTEN AW offset rather than the AR
+    // offset. The AR *tile* routing still uses the true AR address, so only
+    // the register offset is affected.
+    //
+    // Workaround: before a read, prime the widget's awaddr with a write to
+    // the offset being read:
+    //   - 0x0 (STAT), 0x14 (RX_PACKET_COUNT), 0x18: undecoded in TileRegBlock
+    //     (write ACKed, no register updated) -> safe on the same tile.
+    //   - 0xc (DATA): decoded; prime on a DIFFERENT tile so the target tile's
+    //     Data_ register (e.g. holding an indirect-read result) is untouched.
+    //   - 0x4 (CMND), 0x8 (ADDR), 0x10 (COORDINATES): decoded, CMND triggers
+    //     ops -> never primed; callers must read these right after writing
+    //     the same offset (which leaves awaddr already correct).
+    switch (offset) {
+    case 0x0:
+    case 0x14:
+    case 0x18:
+        tile_write_reg(tile, offset, 0);
+        break;
+    case 0xc: {
+        uint32_t other = (tile == TILE_ADDRESSES[0][0]) ? TILE_ADDRESSES[0][1]
+                                                        : TILE_ADDRESSES[0][0];
+        tile_write_reg(other, offset, 0);
+        break;
+    }
+    default:
+        break;
+    }
     return axilite_read(tile + offset);
 }
 
@@ -237,6 +282,14 @@ void mosaic_top_t::indirect_write(uint32_t tile, uint32_t addr, uint32_t data)
 uint32_t mosaic_top_t::indirect_read(uint32_t tile, uint32_t addr)
 {
     tile_write_reg(tile, TILE_ADDR, addr);
+    tile_write_reg(tile, TILE_CMND, OP_READ);
+    step(TILE_CMD_SETTLE);
+    // dp_ram's doutb is a REGISTERED read (doutb <= mem[addrb]), but the
+    // tile captures Data_ <= mem_dout at the csrEn pulse one cycle after the
+    // CMND write - before doutb has updated. The first command therefore
+    // yields mem[previous-address]; issuing the command a second time makes
+    // the second csrEn pulse capture the settled doutb = mem[addr]. No side
+    // effects: Command_Op stays OP_READ, so the memory access just repeats.
     tile_write_reg(tile, TILE_CMND, OP_READ);
     step(TILE_CMD_SETTLE);
     return tile_read_reg(tile, TILE_DATA);

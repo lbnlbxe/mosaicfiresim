@@ -64,6 +64,12 @@ public:
   /// True when the last issued transaction has completed.
   bool done();
 
+  /// Mark the outstanding transaction as consumed (clears the in-flight
+  /// bookkeeping so the next issue_* is accepted). The caller must only call
+  /// this after done() has returned true; bridge drivers cannot advance the
+  /// target themselves, so stepping the target stays in the sim top.
+  void complete();
+
   /// Data of the last completed read transaction. Valid once done().
   uint32_t rdata();
 

@@ -31,8 +31,11 @@ class MoSAICWrapper extends Module {
 
   io.done := mosaicInst.io.internalResetDone
 
-  when(mosaicInst.io.internalResetDone) {
+  // Latch so the message prints exactly once, not every cycle.
+  val resetPrinted = RegInit(false.B)
+  when(mosaicInst.io.internalResetDone && !resetPrinted) {
     printf("MoSAIC has reset successfully\n")
+    resetPrinted := true.B
   }
 }
 
