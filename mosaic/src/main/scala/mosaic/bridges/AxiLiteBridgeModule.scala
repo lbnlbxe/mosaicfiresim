@@ -49,10 +49,13 @@ class AxiLiteBridgeModule(key: AxiLiteKey)(implicit p: Parameters)
 
     // Control registers. NB: attach order defines the address map and MUST
     // match the field order of AXILITEBRIDGEMODULE_struct in the C++ driver.
-    val inAddr     = genWOReg(Wire(UInt(key.addrWidth.W)), "in_addr")
-    val inWData    = genWOReg(Wire(UInt(key.dataWidth.W)), "in_wdata")
-    val startWrite = Pulsify(genWORegInit(Wire(Bool()), "start_write", false.B), pulseLength = 1)
-    val startRead  = Pulsify(genWORegInit(Wire(Bool()), "start_read", false.B), pulseLength = 1)
+    val inAddr  = genWOReg(Wire(UInt(key.addrWidth.W)), "in_addr")
+    val inWData = genWOReg(Wire(UInt(key.dataWidth.W)), "in_wdata")
+    // NB: Pulsify mutates the wire in place (returns Unit)
+    val startWrite = genWORegInit(Wire(Bool()), "start_write", false.B)
+    Pulsify(startWrite, pulseLength = 1)
+    val startRead = genWORegInit(Wire(Bool()), "start_read", false.B)
+    Pulsify(startRead, pulseLength = 1)
     val outRData   = Wire(UInt(key.dataWidth.W))
     genROReg(outRData, "out_rdata")
     val outResp = Wire(UInt(2.W))

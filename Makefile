@@ -22,7 +22,7 @@ firrtl: verilog
 
 firesim:
 	echo "[INFO] Installing MoSAIC FireSim into FireSim..."
-	@for dir in $$(ls $(MOSAIC_MAIN_DIR)); do \
+	@for dir in $$(ls $(MOSAIC_MAIN_DIR) | grep -v scala-chisel6); do \
 		echo "[INFO] Linking $(MOSAIC_MAIN_DIR)/$$dir/$(PRJ) to $(FIRESIM_MAIN_DIR)/$$dir/$(PRJ)"; \
 		echo "    > ln -sf $(MOSAIC_MAIN_DIR)/$$dir/$(PRJ) $(FIRESIM_MAIN_DIR)/$$dir/."; \
 		ln -sf $(MOSAIC_MAIN_DIR)/$$dir/$(PRJ) $(FIRESIM_MAIN_DIR)/$$dir/.; \

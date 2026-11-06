@@ -164,6 +164,12 @@ lazy val mosaic = (project in mosaicDir)
   .settings(commonSettings)
   .settings(chiselSettings)
   .settings(
+    Compile / unmanagedSourceDirectories ++= Seq(
+      // Chisel 6-only sources (mosaic.stage / Generator) that do not compile
+      // under FireSim's Chisel 3.6 build; FireSim consumes only the shared
+      // `scala/` tree (see the `make firesim` symlink target).
+      (ThisBuild / baseDirectory).value / "mosaic/src/main/scala-chisel6"
+    ),
     // AxiLiteBridgeModule is the host-land half of the AxiLiteBridge and
     // depends on FireSim's `midas.widgets` machinery, which is only on the
     // classpath when this tree is symlinked into FireSim (make firesim).
