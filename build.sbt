@@ -163,3 +163,11 @@ lazy val mosaic = (project in mosaicDir)
   .dependsOn(cde, midas, firesim)
   .settings(commonSettings)
   .settings(chiselSettings)
+  .settings(
+    // AxiLiteBridgeModule is the host-land half of the AxiLiteBridge and
+    // depends on FireSim's `midas.widgets` machinery, which is only on the
+    // classpath when this tree is symlinked into FireSim (make firesim).
+    // Exclude it from this repo's Chisel 6 build.
+    Compile / unmanagedSources / excludeFilter :=
+      (Compile / unmanagedSources / excludeFilter).value || "AxiLiteBridgeModule.scala"
+  )

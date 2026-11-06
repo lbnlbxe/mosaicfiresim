@@ -21,11 +21,21 @@ class PreElaboration extends Phase with PreservesAll with HasMoSAICStageUtils {
     val rOpts = view[MoSAICOptions](annotations)
     val topMod = rOpts.topModule.get
 
-    val gen = () => 
-      topMod 
-        .getConstructor() 
-        .newInstance() match { 
-          case a: RawModule => a 
+    // Prefer a no-arg constructor; fall back to the (Parameters) constructor
+    // used by harnesses (e.g. FireSim-style `implicit val p: Parameters`)
+    // with empty parameters.
+    val gen = () =>
+      (
+        try {
+          topMod.getConstructor().newInstance()
+        } catch {
+          case _: NoSuchMethodException =>
+            topMod
+              .getConstructor(classOf[org.chipsalliance.cde.config.Parameters])
+              .newInstance(org.chipsalliance.cde.config.Parameters.empty)
+        }
+      ) match {
+        case a: RawModule => a
       }
 
     ChiselGeneratorAnnotation(gen) +: annotations

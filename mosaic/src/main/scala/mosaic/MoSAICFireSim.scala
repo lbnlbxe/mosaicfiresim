@@ -5,7 +5,6 @@ import chisel3._
 import org.chipsalliance.cde.config.Parameters
 
 import firesim.lib.bridges.{PeekPokeBridge, RationalClockBridge, ResetPulseBridge, ResetPulseBridgeParameters}
-import firesim.mosaic.bridges.AxiLiteBridge
 import midas.targetutils.GlobalResetCondition
 
 class SimpleMoSAIC extends Module {
@@ -15,11 +14,18 @@ class SimpleMoSAIC extends Module {
 
   val simpleMoSAIC = Module(new mosaic.MoSAICChisel("mosaic_2x2_firesim"))
 
-  // Control (AXI4Lite) Interface: driven by the host via the AxiLiteBridge
-  val axiControlBridge = AxiLiteBridge(clock, simpleMoSAIC.io.control)
+  // Disable Control (AXI4Lite) Interface
+  simpleMoSAIC.io.control.aw.valid := false.B
+  simpleMoSAIC.io.control.aw.bits.addr := 0.U
+  simpleMoSAIC.io.control.w.valid := false.B
+  simpleMoSAIC.io.control.w.bits.data := 0.U
+  simpleMoSAIC.io.control.w.bits.strb := 0.U
+  simpleMoSAIC.io.control.b.ready := false.B
+  simpleMoSAIC.io.control.ar.valid := false.B
+  simpleMoSAIC.io.control.ar.bits.addr := 0.U
+  simpleMoSAIC.io.control.r.ready := false.B
 
-  // enableProcessing is vestigial: MoSAIC ties it to 1 internally
-  // (S_CONTROLLER_USS.sv) and leaves the top-level port unconnected.
+  // Disable enableProcessing
   simpleMoSAIC.io.enableProcessing := false.B
 
   io.done := simpleMoSAIC.io.internalResetDone

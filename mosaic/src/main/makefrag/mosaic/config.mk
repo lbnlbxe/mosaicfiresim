@@ -6,7 +6,7 @@
 
 # These point at the main class of the target's Chisel generator
 DESIGN_PACKAGE ?= firesim.mosaic
-DESIGN ?= SimpleMoSAICHarness
+DESIGN ?= MoSAICWrapperHarness
 
 # Re-uses the NoConfig from midasexamples for the default 'SimpleMoSAICHarness'
 # which doesn't use any 'Parameters'

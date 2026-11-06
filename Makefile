@@ -18,7 +18,7 @@ verilog:
 
 firrtl: verilog
 	$(call git_commit, "generate firrtl")
-	sbt ";project $(PRJ);runMain $(PRJ).Generator --target-dir $(BUILD_DIR) --top-module firesim.mosaic.SimpleMoSAIC --emit-legacy-sfc"
+	sbt ";project $(PRJ);runMain $(PRJ).Generator --target-dir $(BUILD_DIR) --top-module firesim.mosaic.MoSAICWrapperHarness --emit-legacy-sfc"
 
 firesim:
 	echo "[INFO] Installing MoSAIC FireSim into FireSim..."
