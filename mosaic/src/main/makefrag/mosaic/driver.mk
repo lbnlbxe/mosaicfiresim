@@ -17,6 +17,5 @@ DRIVER_CC := $(firesim_base_dir)/src/main/cc/mosaic/$(MOSAIC_SIM_TOP).cc \
 # -I src/main/cc/mosaic lets the generated header's `#include "bridges/axilite.h"`
 # resolve to the target-local bridge driver (before FireSim's own bridges dir).
 TARGET_CXX_FLAGS := -g -I$(firesim_base_dir)/src/main/cc/mosaic \
-	-include cstdint \
 	-DMOSAIC_FW_DIR=$(abspath $(firesim_base_dir)/src/main/resources/mosaic/MoSAIC-P38/src/Tile.HDL/picorv32_tile/firmware)
 TARGET_LD_FLAGS :=
