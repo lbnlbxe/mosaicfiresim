@@ -18,3 +18,10 @@ TARGET_CONFIG ?= NoConfig
 PLATFORM_CONFIG_PACKAGE ?= midas
 PLATFORM_CONFIG ?= XilinxAlveoU250Config
 PLATFORM ?= xilinx_alveo_u250
+
+# MoSAIC's legacy Verilog trips a handful of benign Verilator 5 lint checks
+# (inferred latches in the qISA extension, an ascending range, a procedural
+# assign to a declaration with an initializer, and similar declaration names).
+# Waive them so the meta-simulator builds; they are all in the untouched
+# MoSAIC-P38 sources.
+EXTRA_VERILATOR_FLAGS ?= -Wno-LATCH -Wno-ASCRANGE -Wno-PROCASSINIT -Wno-SIMILARNAME
