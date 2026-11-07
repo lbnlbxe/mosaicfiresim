@@ -135,6 +135,12 @@ private:
     };
 
     // Tile coordinates for the 2x2 configuration, in row-major order.
+    // UPSTREAM QUIRK: X encodes the ROW and Y encodes the COLUMN
+    // (gen_axi_coord_init: bin = {y=col, x=row}), so the coordinate id is
+    // (col << 3) | row, NOT the intuitive (row << 3) | col. This is why
+    // the spad tile (row 0, col 1) has id 0x08, which is the destination
+    // the firmware's wr_mem(8, ...) mPuts to. HsrcId = {myY, myX} and
+    // packet headers use y_dest[5:3], x_dest[2:0] - same swapped order.
     static constexpr uint32_t TILE_COORDINATES[2][2] = {
         {0x00, 0x08},
         {0x01, 0x09},
@@ -292,7 +298,12 @@ uint32_t mosaic_top_t::indirect_read(uint32_t tile, uint32_t addr)
     // effects: Command_Op stays OP_READ, so the memory access just repeats.
     tile_write_reg(tile, TILE_CMND, OP_READ);
     step(TILE_CMD_SETTLE);
-    return tile_read_reg(tile, TILE_DATA);
+    uint32_t data = tile_read_reg(tile, TILE_DATA);
+    // Reset the OP, as the reference shell does after each memory sequence
+    // (tb_mosaic.sv initialize_mem_tile_AXI ends with CMND <- 0).
+    tile_write_reg(tile, TILE_CMND, 0x0);
+    step(TILE_CMD_SETTLE);
+    return data;
 }
 
 void mosaic_top_t::rv_set_status(uint32_t tile, uint32_t data)
@@ -344,31 +355,43 @@ void mosaic_top_t::setup_mosaic()
 {
     printf("[MOSAIC] Programming MoSAIC tiles\n");
 
-    // 0) Reset the picos (rv_control = 0).
-    for (int j = 0; j < 2; j++) {
-        for (int i = 0; i < 2; i++) {
-            rv_set_status(TILE_ADDRESSES[j][i], 0x00);
-        }
+    // Pico tiles only: the reference flow (tb_mosaic.sv set_pico) issues
+    // OP_RISCV ops exclusively on pico tiles; spad/loop tiles never see a
+    // CMND op.
+    const uint32_t pico_tiles[2] = {TILE_ADDRESSES[0][0], TILE_ADDRESSES[1][1]};
+
+    // 0) Hold the picos in reset (rv_control = 0).
+    for (auto t : pico_tiles) {
+        rv_set_status(t, 0x00);
     }
 
-    // 1) Load firmware into the pico instruction memories.
-    rv_load_firmware(TILE_ADDRESSES[0][0], fw_pico0);
-    rv_load_firmware(TILE_ADDRESSES[1][1], fw_pico1);
+    // 1) Load firmware into the pico instruction memories (each load ends
+    // with CMND cleared, as the reference shell does).
+    rv_load_firmware(pico_tiles[0], fw_pico0);
+    rv_load_firmware(pico_tiles[1], fw_pico1);
 
-    // 2) Initialize tile coordinates.
+    // 2) Initialize tile coordinates (drives each tile's HsrcId).
     for (int j = 0; j < 2; j++) {
         for (int i = 0; i < 2; i++) {
             tile_write_reg(TILE_ADDRESSES[j][i], TILE_COORDS, TILE_COORDINATES[j][i]);
         }
     }
 
-    // 3) Start the picos (rv_control = 1).
-    rv_set_status(TILE_ADDRESSES[0][0], 0x01);
-    rv_set_status(TILE_ADDRESSES[1][1], 0x01);
+    // 3) Loader sanity check BEFORE starting the picos. Reading a pico
+    // tile's memory while its pico runs is forbidden: the host indirect
+    // path and the pico share DPRAM port B with no arbitration (the host
+    // address simply wins the mux in acc_picorv32), so any post-start
+    // access corrupts the running pico. The reference flow likewise never
+    // touches a tile's AXI plane once its pico is started.
+    printf("[MOSAIC] instr word 0 of tile 0x000: 0x%08X (expect 0x00000093)\n",
+           indirect_read(pico_tiles[0], 0));
 
-    printf("[MOSAIC] Started picos (rv status 0x000 -> 0x%02X, 0x300 -> 0x%02X)\n",
-           rv_get_status(TILE_ADDRESSES[0][0]),
-           rv_get_status(TILE_ADDRESSES[1][1]));
+    // 4) Start the picos (rv_control = 1). No CMND ops on the pico tiles
+    // after this point (the reference's OP_STATUS readback is likewise
+    // absent from the reference flow).
+    rv_set_status(pico_tiles[0], 0x01);
+    rv_set_status(pico_tiles[1], 0x01);
+    printf("[MOSAIC] Started picos\n");
 }
 
 // DOC include start: Loop
@@ -379,7 +402,8 @@ int mosaic_top_t::simulation_run()
     // Let the target settle out of reset before programming it.
     step(256);
 
-    // Program the tiles: reset, load firmware, set coordinates, start.
+    // Program the tiles: reset, load firmware, set coordinates, sanity
+    // read, start.
     setup_mosaic();
 
     // infinite loop until '+max-cycles' value is reached (within 'systematic_scheduler_t')
@@ -405,7 +429,18 @@ int mosaic_top_t::simulation_run()
         }
     }
 
-    // Report tile state after processing.
+    // Let the firmware run: start.S boot + main + wr_mem's 16 mPuts +
+    // MSTOREs + rd_mem's 16 mGets all complete well within this window
+    // (the pico boots in ~5k cycles; the MQ work takes a few thousand
+    // more). Only the spad tile's memory is read below: it has no pico,
+    // so its DPRAM port B is host-only (port A carries the NoC mPut
+    // writes) and post-start reads are safe there. Pico tiles must NOT be
+    // read indirectly while running (host wins the shared port-B mux with
+    // no arbitration and corrupts the running pico). Plain control-CSR
+    // reads (stat / rx counters) never touch the memory port and are safe.
+    step(200000);
+
+    // Report tile state after processing (control CSRs only).
     for (int j = 0; j < 2; j++) {
         for (int i = 0; i < 2; i++) {
             uint32_t tile = TILE_ADDRESSES[j][i];
@@ -415,8 +450,27 @@ int mosaic_top_t::simulation_run()
                    tile_read_reg(tile, TILE_RXCOUNT));
         }
     }
-    printf("[MOSAIC] instr word 0 of tile 0x000: 0x%08X\n",
-           indirect_read(TILE_ADDRESSES[0][0], 0));
+
+    // Execution probe (mirrors tools/checkers/check_pico_spad.sh): if the
+    // pico in tile 0x000 ran its firmware (pico_scratchpad.c), wr_mem()
+    // mPut the block 0xCAFECAFE + i into the scratchpad tile 0x100 at
+    // words 1024..1039 (mPut address = tile id << 12 | word offset). The
+    // spad RAM starts zeroed and only the pico writes it, so:
+    //   0x00000000  pico never executed (or mPut path broken)
+    //   0xCAFECAFE  first word: pico executed wr_mem()'s first mPut
+    // Note the expected values are the icarus ground truth (tile_01.dat):
+    // the burst's low 16 bits increment as a counter (cafecafe, cafecaff,
+    // cafecb00, ...), so the last word (0xCAFECAFE + 15) is 0xCAFECB0D,
+    // which proves the full 16-iteration loop completed.
+    uint32_t probe_word_0 = indirect_read(TILE_ADDRESSES[0][1], 1024);
+    uint32_t probe_word_15 = indirect_read(TILE_ADDRESSES[0][1], 1039);
+    printf("[MOSAIC] exec probe: spad tile 0x100 word 1024: 0x%08X (expect 0xCAFECAFE)\n",
+           probe_word_0);
+    printf("[MOSAIC] exec probe: spad tile 0x100 word 1039: 0x%08X (expect 0xCAFECB0D)\n",
+           probe_word_15);
+    if (probe_word_0 != 0xCAFECAFE || probe_word_15 != 0xCAFECB0D) {
+        exit_code = 1;
+    }
 
     return exit_code;
 }
