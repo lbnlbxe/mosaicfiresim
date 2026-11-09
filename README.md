@@ -25,6 +25,51 @@ make firesim
 
 Follow the directions for [FireSim without Chipyard](https://docs.fires.im/en/main/Advanced-Usage/FireSim-without-Chipyard.html) for details on how to build and run MoSAIC within Verilator and FireSim.
 
+### Running `MoSAICWrapper` on Verilator
+
+Here are some basic instructions for running the `MoSAICWrapper` harness within Verilator. Unlike `SimpleMoSAIC`, this harness bridges the MoSAIC control interface to a custom AXI4-Lite bridge, so the run programs the tile firmware over AXI, starts both picos, and probes their execution.
+
+```bash
+cd $FIRESIM_ROOT/sim
+make TARGET_PROJECT=mosaic PLATFORM=xilinx_alveo_u250 run-verilator
+```
+
+You will see the following output upon completion:
+
+```text
+...
+MoSAIC has reset successfully
+[MOSAIC] Programming MoSAIC tiles
+[FW] Loading .../picorv32_tile/firmware/pico_scratchpad.hex into tile 0x000
+[FW] Loaded 1415 words into tile 0x000
+[FW] Loading .../picorv32_tile/firmware/test_tile_nop.hex into tile 0x300
+[FW] Loaded 6 words into tile 0x300
+[MOSAIC] instr word 0 of tile 0x000: 0x00000093 (expect 0x00000093)
+[MOSAIC] Started picos
+[MOSAIC] tile 0x000: stat=0xFF rx_packet_count=66
+[MOSAIC] tile 0x100: stat=0x00 rx_packet_count=48
+[MOSAIC] tile 0x200: stat=0x00 rx_packet_count=0
+[MOSAIC] tile 0x300: stat=0xFF rx_packet_count=0
+[MOSAIC] exec probe: spad tile 0x100 word 1024: 0xCAFECAFE (expect 0xCAFECAFE)
+[MOSAIC] exec probe: spad tile 0x100 word 1039: 0xCAFECB0D (expect 0xCAFECB0D)
+MoSAICWrapper has completed!
+
+Simulation complete.
+*** FAILED *** simulation timed out after 5326553 cycles
+
+Emulation Performance Summary
+------------------------------
+Wallclock Time Elapsed: 96.8 s
+Host Frequency: 59.142 KHz
+Target Cycles Emulated: 5326553
+Effective Target Frequency: 55.041 KHz
+FMR: 1.07
+Note: The latter three figures are based on the fastest target clock.
+make: *** [/home/bxeuser/chipyard/sims/firesim/sim/src/main/makefrag/mosaic/metasim.mk:17: run-verilator] Error 1
+```
+
+This is not an Error, as the simulation timed out. It shows the firmware was programmed into both pico tiles over AXI4-Lite (`[FW]` lines), the picos were started, and the execution probe read back the expected scratchpad words (`0xCAFECAFE` / `0xCAFECB0D`, matching the icarus ground truth). The timeout after 5326553 cycles is the `+max-cycles` guard: the simulation has no natural termination condition yet.
+
 ### Running `SimpleMoSAIC` on Verilator
 
 Here are some basic instructions for running the `SimpleMoSAIC` harness within Verilator.
