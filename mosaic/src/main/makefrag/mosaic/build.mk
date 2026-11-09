@@ -33,6 +33,13 @@ MOSAIC_STAGE_SRCS := \
 
 # Requires JDK 17 (Chisel 6) and 'sbt' on PATH; the Chisel 6 stage runs the
 # MoSAIC perl preprocessing itself (see mosaic/src/main/scala/mosaic/mosaic.scala).
+# Guard: the find above swallows errors (2>/dev/null), so a miscomputed
+# MOSAIC_REPO_ROOT would silently yield empty prerequisites and the build
+# would run against stale FIRRTL/annos without ever re-elaborating.
+ifeq ($(MOSAIC_STAGE_SRCS),)
+$(error MOSAIC_STAGE_SRCS is empty - MOSAIC_REPO_ROOT '$(MOSAIC_REPO_ROOT)' does not contain the MoSAIC target sources (build.sbt, mosaic/src/main/...))
+endif
+
 $(FIRRTL_FILE) $(ANNO_FILE) &: $(MOSAIC_STAGE_SRCS)
 	@mkdir -p $(MOSAIC_STAGE_DIR) $(@D)
 	cd $(MOSAIC_REPO_ROOT) && sbt ";project mosaic; runMain mosaic.Generator --target-dir $(MOSAIC_STAGE_DIR) --top-module $(DESIGN_PACKAGE).$(DESIGN) --emit-legacy-sfc"
