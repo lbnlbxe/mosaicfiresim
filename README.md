@@ -72,11 +72,11 @@ This is not an Error, as the simulation timed out. It shows the firmware was pro
 
 ### Running `SimpleMoSAIC` on Verilator
 
-Here are some basic instructions for running the `SimpleMoSAIC` harness within Verilator.
+Here are some basic instructions for running the `SimpleMoSAIC` harness within Verilator. Note that `MoSAICWrapperHarness` is the default design (`DESIGN ?=` in the target's `config.mk`), so selecting `SimpleMoSAICHarness` is an explicit override. The companion driver must be switched too: the default driver (`mosaic_top`) programs MoSAIC through the `AxiLiteBridge`, which only exists in the `MoSAICWrapper` harness, so `SimpleMoSAIC` uses the reset-only driver (`MOSAIC_SIM_TOP=simple_mosaic_top`).
 
 ```bash
 cd $FIRESIM_ROOT/sim
-make TARGET_PROJECT=mosaic PLATFORM=xilinx_alveo_u250 run-verilator
+make TARGET_PROJECT=mosaic PLATFORM=xilinx_alveo_u250 DESIGN=SimpleMoSAICHarness MOSAIC_SIM_TOP=simple_mosaic_top run-verilator
 ```
 
 You will see the following output upon completion:
@@ -85,23 +85,24 @@ You will see the following output upon completion:
 ...
 MoSAIC has reset successfully
 MoSAIC has reset successfully
-MoSAIC has reset successfully
+...
+SimpleMoSAIC has completed!
 
 Simulation complete.
-*** FAILED *** simulation timed out after 10001 cycles
+*** FAILED *** simulation timed out after 5000001 cycles
 
 Emulation Performance Summary
 ------------------------------
-Wallclock Time Elapsed: 0.3 s
-Host Frequency: 29.128 KHz
-Target Cycles Emulated: 10001
-Effective Target Frequency: 29.061 KHz
+Wallclock Time Elapsed: 105.7 s
+Host Frequency: 47.322 KHz
+Target Cycles Emulated: 5000001
+Effective Target Frequency: 47.321 KHz
 FMR: 1.00
 Note: The latter three figures are based on the fastest target clock.
-make: *** [/home/bxeuser/chipyard/sims/firesim/sim/src/main/makefrag/mosaic/metasim.mk:16: run-verilator] Error 1
+make: *** [/home/bxeuser/chipyard/sims/firesim/sim/src/main/makefrag/mosaic/metasim.mk:17: run-verilator] Error 1
 ```
 
-This is not an Error, as the simulation timed out. In fact, this shows the MoSAIC successfully resetting within Verilator.
+This is not an Error, as the simulation timed out. In fact, this shows the MoSAIC successfully resetting within Verilator: the (unlatched) reset print repeats every cycle once the reset completes, `SimpleMoSAIC has completed!` prints once the harness's `done` signal asserts, and the simulation then idles until the `+max-cycles` guard ends it. Note that switching `MOSAIC_SIM_TOP` does not by itself rebuild an existing simulator binary; delete `generated-src/.../V<design>` and its `.csrc/` directory (or `make clean`) to force the relink.
 
 # Chisel Wrapper for MoSAIC
 
