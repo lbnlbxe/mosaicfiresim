@@ -25,6 +25,25 @@ make firesim
 
 Follow the directions for [FireSim without Chipyard](https://docs.fires.im/en/main/Advanced-Usage/FireSim-without-Chipyard.html) for details on how to build and run MoSAIC within Verilator and FireSim.
 
+### Prerequisites
+
+> **Note:** FireSim upstream (including the 1.22.0 release this repo pins) is missing
+> an `#include <cstdint>` in `cpu_managed_stream.h`, which modern GCC requires when
+> building the Verilator driver (`'uint32_t' does not name a type` errors). Apply this
+> one-line patch to your FireSim checkout before building:
+
+```diff
+--- a/sim/midas/src/main/cc/bridges/cpu_managed_stream.h
++++ b/sim/midas/src/main/cc/bridges/cpu_managed_stream.h
+@@ -3,6 +3,7 @@
+ #ifndef __BRIDGES_CPU_MANAGED_STREAM_H
+ #define __BRIDGES_CPU_MANAGED_STREAM_H
+
++#include <cstdint>
+ #include <functional>
+ #include <string>
+```
+
 ### Running `MoSAICWrapper` on Verilator
 
 Here are some basic instructions for running the `MoSAICWrapper` harness within Verilator. Unlike `SimpleMoSAIC`, this harness bridges the MoSAIC control interface to a custom AXI4-Lite bridge, so the run programs the tile firmware over AXI, starts both picos, and probes their execution.
