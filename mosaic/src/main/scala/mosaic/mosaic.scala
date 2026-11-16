@@ -30,8 +30,28 @@ class mosaic(
     )
   )
 
-  val mosaicRootDir = System.getProperty("user.dir")
-  val mosaicChiselDir = s"${mosaicRootDir}/mosaic"
+  // Locate the repository's `mosaic` directory. This BlackBox elaborates both
+  // from the repository root (the repo's own sbt build, where user.dir is the
+  // repo root) and from FireSim's build (where user.dir is
+  // <repo>/tools/firesim/sim and this scala tree is symlinked in), so search
+  // upwards for the marker directory instead of assuming user.dir.
+  private val mosaicChiselDir: String = {
+    val marker   = Paths.get("mosaic/src/main/resources/mosaic/perl")
+    var candidate = Paths.get(System.getProperty("user.dir")).toAbsolutePath
+    var found: java.nio.file.Path = null
+    while (found == null && candidate != null) {
+      if (Files.exists(candidate.resolve(marker))) {
+        found = candidate
+      } else {
+        candidate = candidate.getParent
+      }
+    }
+    require(
+      found != null,
+      s"Could not locate the mosaic source directory (searched upwards from ${System.getProperty("user.dir")})"
+    )
+    found.toString + "/mosaic"
+  }
   val mosaicVsrcDir   = s"${mosaicChiselDir}/src/main/resources/vsrc"
   val mosaicPerlDir   = s"${mosaicChiselDir}/src/main/resources/mosaic/perl"
   val mosaicGitDir    = s"${mosaicChiselDir}/src/main/resources/mosaic/MoSAIC-P38"

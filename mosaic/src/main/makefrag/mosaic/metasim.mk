@@ -8,8 +8,9 @@
 # to run the simulations.
 ###########################
 
-# terminate simulation after N cycles
-COMMON_SIM_ARGS += +max-cycles=10000
+# terminate simulation after N cycles (the MoSAIC driver's AXI-programmed
+# firmware load alone takes ~150k target cycles, so keep a generous budget)
+COMMON_SIM_ARGS += +max-cycles=5000000
 
 run-verilator-debug run-verilator: run-verilator% : $(GENERATED_DIR)/V$(DESIGN)%
 	mkdir -p $(OUTPUT_DIR)

@@ -4,7 +4,6 @@ import scala.io.Source
 import scala.util.matching.Regex
 import java.io.{File, PrintWriter}
 import java.nio.file.{Files, Paths, Path}
-import scala.collection.mutable.Set
 
 object VerilogPreprocessor {
   
@@ -48,16 +47,22 @@ object VerilogPreprocessor {
   
   /**
    * Process and replace includes directly from a string, returning the processed content
+   *
+   * NOTE: every `include site is expanded textually, matching Verilog
+   * semantics. Files like is_array.vh contain per-site `assign` statements
+   * (no `ifndef guard), so they MUST be expanded at each include site;
+   * deduplicating includes leaves all but the first site's signals undriven
+   * (Verilator: stuck at 0). Files with `ifndef include guards stay safe
+   * under repeated expansion because the guards resolve within the single
+   * combined output file.
    */
   def processIncludesFromString(content: String, incDirs: Seq[String]): String = {
-    val replacedIncludes = Set[String]()
-    
     // Split content into lines for processing
     val lines = content.split("\n")
     val result = new StringBuilder()
-    
-    processLines(lines, result, incDirs, replacedIncludes)
-    
+
+    processLines(lines, result, incDirs)
+
     result.toString()
   }
   
@@ -69,37 +74,31 @@ object VerilogPreprocessor {
   private def processLines(
     lines: Array[String],
     result: StringBuilder,
-    incDirs: Seq[String],
-    replacedIncludes: Set[String]
+    incDirs: Seq[String]
   ): Unit = {
-    
+
     // Process each line
     lines.zipWithIndex.foreach { case (line, idx) =>
       includeRegex.findFirstMatchIn(line) match {
         case Some(m) if m.group(1) == "uvm_macros.svh" =>
           // Keep this include directive as is
           result.append(line).append("\n")
-          
+
         case Some(m) =>
           val includeFile = m.group(1)
-          if (replacedIncludes.contains(includeFile)) {
-            println(s"[INFO] Skipping duplicate include for $includeFile at line ${idx + 1}")
-          } else {
-            println(s"[INFO] Replacing includes for $includeFile at line ${idx + 1}")
-            
-            // Find and process the include file
-            findIncludeContent(includeFile, incDirs) match {
-              case Some(includeContent) =>
-                replacedIncludes.add(includeFile)
-                // Process the include file content recursively
-                val includeLines = includeContent.split("\n")
-                processLines(includeLines, result, incDirs, replacedIncludes)
-                
-              case None =>
-                sys.error(s"[ERROR] Include file $includeFile not found in $incDirs")
-            }
+          println(s"[INFO] Replacing includes for $includeFile at line ${idx + 1}")
+
+          // Find and process the include file
+          findIncludeContent(includeFile, incDirs) match {
+            case Some(includeContent) =>
+              // Process the include file content recursively
+              val includeLines = includeContent.split("\n")
+              processLines(includeLines, result, incDirs)
+
+            case None =>
+              sys.error(s"[ERROR] Include file $includeFile not found in $incDirs")
           }
-          
+
         case None =>
           // Copy the line as is
           result.append(line).append("\n")
